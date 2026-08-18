@@ -13,7 +13,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-@app.get("/")
+@app.get("/tasks")
 def read_root(session: SessionDep) -> list[Task]:
     tasks = session.exec(select(Task)).all()
     return tasks
