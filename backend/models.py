@@ -1,8 +1,7 @@
-from typing import Optional
-from sqlmodel import Field, Session, SQLModel, create_engine, select
-from fastapi import FastAPI
+from sqlmodel import Field, SQLModel
+
 
 class Task(SQLModel, table=True):
-    id: int = Field(primary_key=True)
+    task_id: int = Field(default=None, primary_key=True)
     task_name: str
-    completed: bool = False
+    status: bool = False

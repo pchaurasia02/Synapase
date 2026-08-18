@@ -1,58 +1,68 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
 from pydantic import BaseModel
+from sqlmodel import select
+from backend.database import create_db_and_tables, SessionDep
+from backend.models import Task
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_db_and_tables()
+    yield
 
-
-tasks_db = []
-
-
-class Task(BaseModel):
-    task_id: int
-    task_name: str
-    status: bool = False
+app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/")
-def read_root():
-    return tasks_db
+def read_root(session: SessionDep) -> list[Task]:
+    tasks = session.exec(select(Task)).all()
+    return tasks
+
 
 @app.get("/tasks/{task_id}")
-def read_item(task_id: int):
-    for existing_task in tasks_db:
-        if existing_task.task_id == task_id:
-            return existing_task
-    return {"error": "Task not found"}
-
-@app.post("/tasks/")
-def create_task(task: Task):
-    for existing_task in tasks_db:
-        if existing_task.task_id == task.task_id:
-            return {"error": "Task already exists"}
-    tasks_db.append(task)
+def read_item(task_id: int, session: SessionDep):
+    task = session.get(Task, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
     return task
 
+
+@app.post("/tasks/")
+def create_task(task: Task, session: SessionDep):
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    return task
+
+
 @app.put("/tasks/{task_id}")
-def update_task(task_id: int, updated_task: Task):
-    for existing_task in tasks_db:
-        if existing_task.task_id == task_id:
-            tasks_db.remove(existing_task)
-            tasks_db.append(updated_task)
-            return {"message": "Task updated"}
-    return {"error": "Task not found"}
+def update_task(task_id: int, updated_task: Task, session: SessionDep):
+    task = session.get(Task, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    for attr in ['task_name', 'status']:
+        setattr(task, attr, getattr(updated_task, attr))
+    session.commit()
+    session.refresh(task)
+    return task
+
 
 @app.patch("/tasks/{task_id}")
-def update_task_status(task_id: int, status: bool):
-    for existing_task in tasks_db:
-        if existing_task.task_id == task_id:
-            existing_task.status = status
-            return {"message": "Task status updated"}
-    return {"error": "Task not found"}
+def update_task_status(task_id: int, status: bool, session: SessionDep):
+    task = session.get(Task, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.status = status
+    session.commit()
+    session.refresh(task)
+    return task
+
 
 @app.delete("/tasks/{task_id}")
-def delete_task(task_id: int):
-    for existing_task in tasks_db:
-        if existing_task.task_id == task_id:
-            tasks_db.remove(existing_task)
-            return {"message": "Task deleted"}
-    return {"error": "Task not found"}
+def delete_task(task_id: int, session: SessionDep):
+    task = session.get(Task, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    session.delete(task)
+    session.commit()
+    return {"message": "Task deleted"}
