@@ -56,4 +56,3 @@ def delete_task(task_id: int):
             tasks_db.remove(existing_task)
             return {"message": "Task deleted"}
     return {"error": "Task not found"}
-
